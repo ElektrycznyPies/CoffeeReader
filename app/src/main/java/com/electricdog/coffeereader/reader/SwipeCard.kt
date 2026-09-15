@@ -4,7 +4,6 @@ package com.electricdog.coffeereader.reader
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +25,11 @@ import androidx.compose.ui.unit.dp
 import com.electricdog.coffeereader.R
 import kotlin.math.abs
 import kotlin.math.roundToInt
-
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChange
+import kotlin.math.sign
 internal enum class SwipeAction(val label: Int, val color: Color, val strength: Float) {
     Bookmark(R.string.cr_adding_bookmark, Color(0xFF45B86B), 0.48f),
     Tag(R.string.cr_adding_tags, Color(0xFFFFA342), 0.24f),
@@ -55,9 +58,12 @@ internal fun SwipeCard(
     val left by rememberUpdatedState(onLeft)
     val hint by rememberUpdatedState(onHint)
     val threshold = with(LocalDensity.current) { 72.dp.toPx() }
+    val activationThreshold = with(LocalDensity.current) { 24.dp.toPx() } // Sensitivity of drag start
+    val horizontalDominance = 1.5f
+    val visualThreshold = threshold - activationThreshold
     val action = if (drag > 0f) rightAction else if (drag < 0f) leftAction else null
     val color = action?.let {
-        lerp(MaterialTheme.colorScheme.surface, it.color, (abs(drag) / threshold).coerceIn(0f, 1f) * it.strength)
+        lerp(MaterialTheme.colorScheme.surface, it.color, (abs(drag) / visualThreshold).coerceIn(0f, 1f) * it.strength)
     } ?: MaterialTheme.colorScheme.surface
     val rightLabel = rightAction?.let { stringResource(it.label) }
     val leftLabel = leftAction?.let { stringResource(it.label) }
@@ -66,23 +72,84 @@ internal fun SwipeCard(
     Surface(shape = RoundedCornerShape(14.dp), color = color,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth().offset { IntOffset(drag.roundToInt(), 0) }
-            .pointerInput(key, threshold, rightAction, leftAction) {
-                detectHorizontalDragGestures(
-                    onDragEnd = {
-                        val completed = drag
+            .pointerInput(key, threshold, activationThreshold, rightAction, leftAction) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var totalX = 0f
+                    var totalY = 0f
+                    var swiping = false
+                    var releasedX: Float? = null
+
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.changes.any { it.id != down.id && it.pressed }) break
+
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: break
+                            if (change.isConsumed) break
+
+                            val movement = change.positionChange()
+                            totalX += movement.x
+                            totalY += movement.y
+
+                            if (!change.pressed) {
+                                if (swiping) {
+                                    change.consume()
+                                    releasedX = totalX
+                                }
+                                break
+                            }
+
+                            if (!swiping) {
+                                // Once vertical scrolling wins, wait for the next gesture.
+                                if (abs(totalY) >= viewConfiguration.touchSlop &&
+                                    abs(totalY) >= abs(totalX)) break
+
+                                if (abs(totalX) >= activationThreshold &&
+                                    abs(totalX) >= abs(totalY) * horizontalDominance) {
+
+                                    if ((totalX > 0f && rightAction == null) ||
+                                        (totalX < 0f && leftAction == null)) break
+
+                                    swiping = true
+                                } else {
+                                    // Let the parent list handle scrolling first.
+                                    val finalEvent = awaitPointerEvent(PointerEventPass.Final)
+                                    if (finalEvent.changes.any {
+                                            it.id == down.id && it.isConsumed
+                                        }) break
+                                    continue
+                                }
+                            }
+
+                            change.consume()
+
+                            // Avoid a jump when the activation threshold is crossed.
+                            drag = (
+                                    sign(totalX) *
+                                            (abs(totalX) - activationThreshold).coerceAtLeast(0f)
+                                    ).coerceIn(
+                                    if (leftAction == null) 0f else -visualThreshold * 1.6f,
+                                    if (rightAction == null) 0f else visualThreshold * 1.6f,
+                                )
+
+                            hint(
+                                key,
+                                if (drag > 0f) rightAction
+                                else if (drag < 0f) leftAction
+                                else null,
+                            )
+                        }
+                    } finally {
                         drag = 0f
                         hint(key, null)
-                        if (completed >= threshold && rightAction != null) right()
-                        else if (completed <= -threshold && leftAction != null) left()
-                    },
-                    onDragCancel = { drag = 0f; hint(key, null) },
-                ) { change, amount ->
-                    change.consume()
-                    drag = (drag + amount).coerceIn(
-                        if (leftAction == null) 0f else -threshold * 1.6f,
-                        if (rightAction == null) 0f else threshold * 1.6f,
-                    )
-                    hint(key, if (drag > 0f) rightAction else if (drag < 0f) leftAction else null)
+                    }
+
+                    releasedX?.let { distance ->
+                        if (distance >= threshold && rightAction != null) right()
+                        else if (distance <= -threshold && leftAction != null) left()
+                    }
                 }
             }.combinedClickable(onClick = onClick, onLongClick = onLongPress)
             .semantics {
