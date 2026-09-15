@@ -37,6 +37,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     var diagnostics by mutableStateOf<List<Pair<String, String>>>(emptyList())
     var refreshIssues by mutableStateOf<List<Pair<String, String>>>(emptyList())
     var expandedSources by mutableStateOf<Set<String>>(emptySet())
+    private val deletedSources = mutableSetOf<String>()
     private val messages = Channel<String>(Channel.BUFFERED)
     val events = messages.receiveAsFlow()
     private val writes = Channel<ReaderState>(Channel.CONFLATED)
@@ -94,10 +95,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             notify(R.string.cr_source_exists)
             return@task
         }
-        val source = feed.source.copy(tags = tags, limit = state.defaultLimit)
+        val source = feed.source.copy(tags = tags, limit = ReaderConfig.DEFAULT_SOURCE_LIMIT)
+        deletedSources.remove(source.url)
         commit(state.copy(sources = state.sources + source,
             articles = mergeArticles(state.articles, feed.articles)))
         candidates = emptyList()
+        if (feed.limit == FeedLimit.BYTES && feed.articles.isEmpty()) notify(R.string.cr_feed_budget_empty)
         done()
     }
 
@@ -107,7 +110,11 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val feed = withContext(Dispatchers.IO) { FeedNetwork.fetch(source) }
                 if (state.sources.none { it.url == source.url }) continue
-                val articles = feed.articles.map { it.copy(sourceUrl = source.url, sourceName = source.name) }
+                val currentSource = state.sources.first { it.url == source.url }
+                val articles = feed.articles.map { it.copy(sourceUrl = source.url, sourceName = currentSource.name) }
+                if (feed.limit == FeedLimit.BYTES && feed.articles.isEmpty()) {
+                    issues += currentSource.name to getApplication<Application>().getString(R.string.cr_feed_budget_empty)
+                }
                 commit(state.copy(articles = mergeArticles(state.articles, articles)))
             } catch (error: CancellationException) { throw error } catch (error: Exception) {
                 val description = if (error is HttpFailure) "HTTP ${error.code}"
@@ -148,7 +155,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
     fun removeBookmark(article: Article) = commit(state.copy(bookmarks = state.bookmarks.filterNot { it.id == article.id }))
     fun restoreBookmark(article: Article) {
-        if (state.bookmarks.none { it.id == article.id }) commit(state.copy(bookmarks = state.bookmarks + article))
+        if (article.sourceUrl !in deletedSources && state.bookmarks.none { it.id == article.id }) commit(state.copy(bookmarks = state.bookmarks + article))
     }
     fun setGrouped(value: Boolean) { expandedSources = emptySet(); commit(state.copy(grouped = value)) }
     fun setDays(value: Int) { expandedSources = emptySet(); commit(state.copy(days = value)) }
@@ -158,15 +165,20 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         commit(state.copy(tagNames = names, displayTags = display))
     }
     fun updateSource(source: FeedSource) {
+        expandedSources = expandedSources - source.url
         commit(state.copy(sources = state.sources.map { if (it.url == source.url) source else it },
-            articles = state.articles.map { if (it.sourceUrl == source.url) it.copy(sourceName = source.name) else it }))
+            articles = state.articles.map { if (it.sourceUrl == source.url) it.copy(sourceName = source.name) else it },
+            bookmarks = state.bookmarks.map { if (it.sourceUrl == source.url) it.copy(sourceName = source.name) else it }))
     }
-    fun removeSource(source: FeedSource) = commit(state.copy(
-        sources = state.sources.filterNot { it.url == source.url },
-        articles = state.articles.filterNot { it.sourceUrl == source.url },
-    ))
-    fun setDefaultLimit(limit: Int, applyToExisting: Boolean) = commit(state.copy(defaultLimit = limit,
-        sources = if (applyToExisting) state.sources.map { it.copy(limit = limit) } else state.sources))
+    fun removeSource(source: FeedSource) {
+        deletedSources += source.url
+        expandedSources = expandedSources - source.url
+        refreshIssues = emptyList()
+        diagnostics = emptyList()
+        // A previously generated link still exists remotely, but is no longer offered as the current export.
+        exportedUrl = ""
+        commit(state.withoutSource(source.url))
+    }
 
     fun export() = task {
         exportedUrl = withContext(Dispatchers.IO) { FeedNetwork.export(state) }
@@ -187,6 +199,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             source.copy(tags = source.tags.mapNotNull { mapping.getOrNull(it)?.takeIf { tag -> tag in 0..4 } }.toSet())
         }
         if (state.sources.size + additions.size > ReaderConfig.MAX_SOURCES) { notify(R.string.cr_source_cap); return }
+        deletedSources.removeAll(additions.map { it.url }.toSet())
         val saved = state.bookmarks.map { it.id }.toSet()
         val bookmarks = data.bookmarks.filterNot { it.id in saved }
         commit(state.copy(sources = state.sources + additions, bookmarks = state.bookmarks + bookmarks))
@@ -209,6 +222,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 val feed = withContext(Dispatchers.IO) { FeedNetwork.fetch(source) }
                 when {
+                    feed.limit == FeedLimit.BYTES && feed.articles.isEmpty() -> getApplication<Application>().getString(R.string.cr_feed_budget_empty)
                     feed.source.url != source.url -> getApplication<Application>().getString(R.string.cr_redirected, feed.source.url)
                     feed.articles.isEmpty() -> getApplication<Application>().getString(R.string.cr_empty_feed)
                     feed.articles.maxOf { it.publishedAt } < System.currentTimeMillis() - 30L * 86_400_000L ->

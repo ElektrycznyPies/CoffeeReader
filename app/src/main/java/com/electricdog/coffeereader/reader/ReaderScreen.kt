@@ -20,13 +20,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,16 +39,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -65,7 +61,7 @@ import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToInt
 
-private enum class Panel { None, Add, Bookmarks, Export, Import, Tags, Sets, Diagnostics }
+private enum class Panel { None, Add, Bookmarks, Export, Import, Tags, Sets, Sources, Help, Diagnostics }
 private val TagColors = listOf(0xFFFFDEAD, 0xFFFFC77B, 0xFFF8AE54, 0xFFE99137, 0xFFD97725).map { Color(it) }
 private val TagIcons = listOf(R.drawable.ic_cr_events, R.drawable.ic_cr_science,
     R.drawable.ic_cr_arts, R.drawable.ic_cr_travel, R.drawable.ic_cr_sports)
@@ -88,7 +84,24 @@ private fun ReaderContent(vm: ReaderViewModel) {
     val snackbar = remember { SnackbarHostState() }
     var panel by rememberSaveable { mutableStateOf(Panel.None) }
     var drawer by rememberSaveable { mutableStateOf(false) }
+    var focusedSourceUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    val focusedSource = state.sources.firstOrNull { it.url == focusedSourceUrl }
+    val flowListState = rememberLazyListState()
+    val sourceListState = rememberLazyListState()
+    val sourceBackground = Color(0xFFEDF7E8)
+    val sourceForeground = Color(0xFF173521)
+    LaunchedEffect(vm.ready, focusedSourceUrl, focusedSource?.url) {
+        // A removed source must not leave the screen in an empty focus mode.
+        if (vm.ready && focusedSourceUrl != null && focusedSource == null) focusedSourceUrl = null
+    }
     var editSource by remember { mutableStateOf<FeedSource?>(null) }
+    var deleteSource by remember { mutableStateOf<FeedSource?>(null) }
+    var swipeHint by remember { mutableStateOf<SwipeHint?>(null) }
+    val onSwipeHint: (String, SwipeAction?) -> Unit = { owner, action ->
+        if (action != null) swipeHint = SwipeHint(owner, action)
+        else if (swipeHint?.owner == owner) swipeHint = null
+    }
+    LaunchedEffect(panel) { swipeHint = null }
     var tagSource by remember { mutableStateOf<FeedSource?>(null) }
     var importAddress by rememberSaveable { mutableStateOf("") }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -111,6 +124,8 @@ private fun ReaderContent(vm: ReaderViewModel) {
     }
     LaunchedEffect(vm) { vm.events.collect { snackbar.showSnackbar(it) } }
     BackHandler(drawer) { drawer = false }
+    BackHandler(focusedSource != null && panel == Panel.None && !drawer &&
+            editSource == null && deleteSource == null && tagSource == null) { focusedSourceUrl = null }
 
     fun openArticle(article: Article) {
         if (openInBrowser(context, article.url)) vm.markRead(article)
@@ -119,7 +134,8 @@ private fun ReaderContent(vm: ReaderViewModel) {
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = if (focusedSource != null) sourceBackground else MaterialTheme.colorScheme.background,
+            contentColor = if (focusedSource != null) sourceForeground else MaterialTheme.colorScheme.onBackground,
             snackbarHost = { SnackbarHost(snackbar) },
             topBar = {
                 Surface(shadowElevation = 2.dp) {
@@ -127,32 +143,46 @@ private fun ReaderContent(vm: ReaderViewModel) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             SquareAction(R.drawable.ic_cr_add, stringResource(R.string.cr_add_source),
                                 Modifier.size(80.dp), vm.ready) { vm.candidates = emptyList(); panel = Panel.Add }
-                            SquareAction(if (state.grouped) R.drawable.ic_cr_group else R.drawable.ic_cr_flow,
-                                stringResource(if (state.grouped) R.string.cr_group_by_source else R.string.cr_flow),
-                                Modifier.size(72.dp), vm.ready) { vm.setGrouped(!state.grouped) }
+                            SquareAction(
+                                if (focusedSource != null || !state.grouped) R.drawable.ic_cr_flow else R.drawable.ic_cr_group,
+                                stringResource(if (focusedSource != null) R.string.cr_back_to_flow
+                                else if (state.grouped) R.string.cr_group_by_source else R.string.cr_flow),
+                                Modifier.size(72.dp), vm.ready,
+                                containerColor = if (focusedSource != null) Color(0xFF287443) else MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = if (focusedSource != null) Color.White else MaterialTheme.colorScheme.onSecondaryContainer,
+                            ) {
+                                if (focusedSource != null) focusedSourceUrl = null else vm.setGrouped(!state.grouped)
+                            }
                             Spacer(Modifier.weight(1f))
                             IconButton(onClick = { drawer = true }, enabled = vm.ready, modifier = Modifier.size(52.dp)) {
                                 CrIcon(R.drawable.ic_cr_menu, stringResource(R.string.cr_menu))
                             }
                         }
-                        var slider by remember(state.days) {
-                            mutableFloatStateOf(ReaderConfig.DAY_OPTIONS.indexOf(state.days).toFloat())
-                        }
-                        Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(stringResource(R.string.cr_time_depth), style = MaterialTheme.typography.labelMedium)
-                            Spacer(Modifier.weight(1f))
-                            Text(if (slider.roundToInt() == 0) stringResource(R.string.cr_since_last_visit)
+                        if (focusedSource != null) {
+                            Text(stringResource(R.string.cr_single_source_hint), Modifier.padding(top = 12.dp),
+                                style = MaterialTheme.typography.bodySmall)
+                            Text(stringResource(R.string.cr_all_downloaded), Modifier.padding(top = 6.dp),
+                                style = MaterialTheme.typography.labelLarge)
+                        } else {
+                            var slider by remember(state.days) {
+                                mutableFloatStateOf(ReaderConfig.DAY_OPTIONS.indexOf(state.days).toFloat())
+                            }
+                            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.cr_time_depth), style = MaterialTheme.typography.labelMedium)
+                                Spacer(Modifier.weight(1f))
+                                Text(if (slider.roundToInt() == 0) stringResource(R.string.cr_since_last_visit)
                                 else if (slider.roundToInt() == 1) stringResource(R.string.cr_one_day)
                                 else stringResource(R.string.cr_days, ReaderConfig.DAY_OPTIONS[slider.roundToInt()]),
-                                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        }
-                        Slider(value = slider, onValueChange = { slider = it }, valueRange = 0f..6f,
-                            steps = 5, enabled = vm.ready,
-                            onValueChangeFinished = { vm.setDays(ReaderConfig.DAY_OPTIONS[slider.roundToInt()]) },
-                            modifier = Modifier.fillMaxWidth().height(34.dp))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            listOf("↶", "1", "3", "5", "7", "14", "30").forEach {
-                                Text(it, style = MaterialTheme.typography.labelSmall)
+                                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            }
+                            Slider(value = slider, onValueChange = { slider = it }, valueRange = 0f..6f,
+                                steps = 5, enabled = vm.ready,
+                                onValueChangeFinished = { vm.setDays(ReaderConfig.DAY_OPTIONS[slider.roundToInt()]) },
+                                modifier = Modifier.fillMaxWidth().height(34.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                listOf("↶", "1", "3", "5", "7", "14", "30").forEach {
+                                    Text(it, style = MaterialTheme.typography.labelSmall)
+                                }
                             }
                         }
                         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
@@ -160,7 +190,7 @@ private fun ReaderContent(vm: ReaderViewModel) {
                 }
             },
             bottomBar = {
-                if (state.displayTags) Surface(shadowElevation = 4.dp) {
+                if (state.displayTags && focusedSource == null) Surface(shadowElevation = 4.dp) {
                     Row(Modifier.navigationBarsPadding().padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         state.tagNames.forEachIndexed { index, name ->
                             Surface(onClick = { vm.toggleTag(index) }, enabled = vm.ready,
@@ -182,9 +212,9 @@ private fun ReaderContent(vm: ReaderViewModel) {
                 else if (!vm.ready) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 else {
                     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(vm.activeTag?.let { state.tagNames[it] } ?: stringResource(R.string.cr_all_sources),
+                        Text(focusedSource?.name ?: vm.activeTag?.let { state.tagNames[it] } ?: stringResource(R.string.cr_all_sources),
                             style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                        if (vm.activeTag != null) TextButton(onClick = { vm.activeTag = null }) { Text(stringResource(R.string.cr_all)) }
+                        if (focusedSource == null && vm.activeTag != null) TextButton(onClick = { vm.activeTag = null }) { Text(stringResource(R.string.cr_all)) }
                         IconButton(onClick = { vm.refresh() }, enabled = !vm.busy && state.sources.isNotEmpty()) {
                             CrIcon(R.drawable.ic_cr_refresh, stringResource(R.string.cr_refresh))
                         }
@@ -192,20 +222,28 @@ private fun ReaderContent(vm: ReaderViewModel) {
                     if (vm.refreshIssues.isNotEmpty()) TextButton(onClick = { panel = Panel.Diagnostics }) {
                         Text(stringResource(R.string.cr_refresh_errors, vm.refreshIssues.size))
                     }
-                    val all = filteredArticles(state, vm.activeTag, vm.visitStart, System.currentTimeMillis())
-                    val rows = buildRows(all, vm)
+                    // Focus mode shows every locally available article from this RSS URL.
+                    // Normal time/tag filters and collapsed groups stay untouched for the return.
+                    val rows = if (focusedSource != null) {
+                        state.articles.filter { it.sourceUrl == focusedSource.url }
+                            .sortedByDescending { it.publishedAt }.map { FeedRow.Item(it) }
+                    } else buildRows(filteredArticles(state, vm.activeTag, vm.visitStart, System.currentTimeMillis()), vm)
                     if (rows.isEmpty()) {
                         Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(stringResource(if (state.sources.isEmpty()) R.string.cr_empty_title else R.string.cr_no_articles),
+                            Text(stringResource(if (focusedSource != null) R.string.cr_source_no_articles
+                            else if (state.sources.isEmpty()) R.string.cr_empty_title else R.string.cr_no_articles),
                                 style = MaterialTheme.typography.headlineSmall)
-                            Text(stringResource(if (state.sources.isEmpty()) R.string.cr_empty_hint else R.string.cr_depth_hint),
+                            Text(stringResource(if (focusedSource != null) R.string.cr_source_empty_hint
+                            else if (state.sources.isEmpty()) R.string.cr_empty_hint else R.string.cr_depth_hint),
                                 Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodyMedium)
                             if (state.sources.isEmpty()) Button(onClick = { panel = Panel.Add }, Modifier.padding(top = 20.dp)) {
                                 Text(stringResource(R.string.cr_add_source))
                             }
                         }
-                    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp),
+                    } else LazyColumn(Modifier.fillMaxSize(),
+                        state = if (focusedSource != null) sourceListState else flowListState,
+                        contentPadding = PaddingValues(12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(rows, key = { it.key }) { row ->
                             when (row) {
@@ -221,7 +259,7 @@ private fun ReaderContent(vm: ReaderViewModel) {
                                     saved = state.bookmarks.any { it.id == row.article.id },
                                     onOpen = { openArticle(row.article) }, onRight = { vm.bookmark(row.article) },
                                     onLeft = { tagSource = state.sources.firstOrNull { it.url == row.article.sourceUrl } },
-                                    onLongPress = { vm.bookmark(row.article) })
+                                    onLongPress = { vm.bookmark(row.article) }, onHint = onSwipeHint)
                             }
                         }
                     }
@@ -239,7 +277,8 @@ private fun ReaderContent(vm: ReaderViewModel) {
                         modifier = Modifier.padding(vertical = 20.dp))
                     listOf(R.string.cr_discover_sets to Panel.Sets, R.string.cr_bookmarks to Panel.Bookmarks,
                         R.string.cr_export_feeds to Panel.Export, R.string.cr_import_feeds to Panel.Import,
-                        R.string.cr_tags to Panel.Tags).forEach { (label, target) ->
+                        R.string.cr_tags to Panel.Tags, R.string.cr_all_sources to Panel.Sources,
+                        R.string.cr_help_about to Panel.Help).forEach { (label, target) ->
                         TextButton(onClick = {
                             drawer = false; panel = target
                             if (target == Panel.Import || target == Panel.Sets) vm.pendingImport = null
@@ -253,36 +292,54 @@ private fun ReaderContent(vm: ReaderViewModel) {
                 }
             }
         }
+        if (panel == Panel.None && !drawer) SwipeLabel(swipeHint,
+            Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 6.dp))
     }
 
     if (panel != Panel.None) ReaderDialog(stringResource(when (panel) {
         Panel.Add -> R.string.cr_add_source; Panel.Bookmarks -> R.string.cr_bookmarks
         Panel.Export -> R.string.cr_export_feeds; Panel.Import -> R.string.cr_import_feeds
         Panel.Tags -> R.string.cr_tags; Panel.Sets -> R.string.cr_discover_sets
+        Panel.Sources -> R.string.cr_all_sources; Panel.Help -> R.string.cr_help_about
         Panel.Diagnostics -> R.string.cr_diagnostics; else -> R.string.cr_app_name
-    }), onClose = { panel = Panel.None }) {
+    }), onClose = { swipeHint = null; panel = Panel.None }, swipeHint = swipeHint) {
         if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         when (panel) {
-            Panel.Add -> AddSourcePanel(vm, onAdded = { panel = Panel.None }, onEdit = { editSource = it })
+            Panel.Add -> AddSourcePanel(vm, onAdded = { panel = Panel.None })
+            Panel.Sources -> AllSourcesPanel(vm, onHint = onSwipeHint,
+                onOpen = { source ->
+                    focusedSourceUrl = source.url
+                    swipeHint = null
+                    panel = Panel.None
+                    scope.launch { sourceListState.scrollToItem(0) }
+                }, onEdit = { editSource = it }, onDelete = { deleteSource = it })
+            Panel.Help -> HelpPanel()
             Panel.Tags -> TagsPanel(vm) { panel = Panel.None }
             Panel.Bookmarks -> {
+                val bookmarkRemovedMessage = stringResource(R.string.cr_bookmark_removed)
+                val undoLabel = stringResource(R.string.cr_undo)
                 var byTime by rememberSaveable { mutableStateOf(true) }
                 TextButton(onClick = { byTime = !byTime }) {
                     Text(stringResource(if (byTime) R.string.cr_by_time else R.string.cr_by_name))
                 }
                 val articles = if (byTime) state.bookmarks.sortedByDescending { it.savedAt }
-                    else state.bookmarks.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.sourceName })
+                else state.bookmarks.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.sourceName })
                 if (articles.isEmpty()) Text(stringResource(R.string.cr_no_bookmarks), Modifier.padding(vertical = 24.dp))
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(articles, key = { it.id }) { article ->
-                        ArticleCard(article, true, onOpen = { openArticle(article) }, onRight = {}, onLongPress = {}, onLeft = {
-                            vm.removeBookmark(article)
-                            scope.launch {
-                                val result = snackbar.showSnackbar(context.getString(R.string.cr_bookmark_removed),
-                                    actionLabel = context.getString(R.string.cr_undo), duration = SnackbarDuration.Short)
-                                if (result == SnackbarResult.ActionPerformed) vm.restoreBookmark(article)
-                            }
-                        })
+                        ArticleCard(article, true, onOpen = { openArticle(article) },
+                            onRight = {}, onLongPress = {}, onHint = onSwipeHint,
+                            rightAction = null, leftAction = SwipeAction.DeleteBookmark, onLeft = {
+                                vm.removeBookmark(article)
+                                scope.launch {
+                                    val result = snackbar.showSnackbar(
+                                        message = bookmarkRemovedMessage,
+                                        actionLabel = undoLabel,
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) vm.restoreBookmark(article)
+                                }
+                            })
                     }
                 }
                 // Keep undo reachable while the bookmarks dialog is open.
@@ -291,24 +348,24 @@ private fun ReaderContent(vm: ReaderViewModel) {
             Panel.Export -> ExportPanel(vm, onSaveFile = { saveFile.launch("coffee-reader.json") })
             Panel.Import -> {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                OutlinedTextField(importAddress, { importAddress = it; vm.pendingImport = null },
-                    label = { Text(stringResource(R.string.cr_paste_link)) }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    TextButton(onClick = { vm.pendingImport = null; vm.previewUrl(importAddress) }, enabled = !vm.busy && importAddress.isNotBlank()) {
-                        Text(stringResource(R.string.cr_preview))
+                    OutlinedTextField(importAddress, { importAddress = it; vm.pendingImport = null },
+                        label = { Text(stringResource(R.string.cr_paste_link)) }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
+                    Row(Modifier.horizontalScroll(rememberScrollState())) {
+                        TextButton(onClick = { vm.pendingImport = null; vm.previewUrl(importAddress) }, enabled = !vm.busy && importAddress.isNotBlank()) {
+                            Text(stringResource(R.string.cr_preview))
+                        }
+                        TextButton(onClick = {
+                            GmsBarcodeScanning.getClient(context).startScan()
+                                .addOnSuccessListener { barcode ->
+                                    barcode.rawValue?.let { importAddress = it; vm.previewUrl(it) }
+                                }.addOnFailureListener { vm.notify(R.string.cr_scan_failed) }
+                        }, enabled = !vm.busy) { Text(stringResource(R.string.cr_scan_qr)) }
+                        TextButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !vm.busy) {
+                            Text(stringResource(R.string.cr_choose_file))
+                        }
                     }
-                    TextButton(onClick = {
-                        GmsBarcodeScanning.getClient(context).startScan()
-                            .addOnSuccessListener { barcode ->
-                                barcode.rawValue?.let { importAddress = it; vm.previewUrl(it) }
-                            }.addOnFailureListener { vm.notify(R.string.cr_scan_failed) }
-                    }, enabled = !vm.busy) { Text(stringResource(R.string.cr_scan_qr)) }
-                    TextButton(onClick = { filePicker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !vm.busy) {
-                        Text(stringResource(R.string.cr_choose_file))
-                    }
-                }
-                ImportPreview(vm) { panel = Panel.None }
+                    ImportPreview(vm) { panel = Panel.None }
                 }
                 SnackbarHost(snackbar)
             }
@@ -340,6 +397,15 @@ private fun ReaderContent(vm: ReaderViewModel) {
         if (panel in listOf(Panel.Add, Panel.Export, Panel.Tags)) SnackbarHost(snackbar)
     }
     editSource?.let { source -> SourceEditor(source, vm, onClose = { editSource = null }) }
+    deleteSource?.let { source ->
+        AlertDialog(onDismissRequest = { deleteSource = null },
+            title = { Text(stringResource(R.string.cr_delete_source)) },
+            text = { Text(stringResource(R.string.cr_delete_source_hint, source.name)) },
+            confirmButton = { TextButton(onClick = { vm.removeSource(source); deleteSource = null }) {
+                Text(stringResource(R.string.cr_delete), color = MaterialTheme.colorScheme.error)
+            } },
+            dismissButton = { TextButton(onClick = { deleteSource = null }) { Text(stringResource(R.string.cr_cancel)) } })
+    }
     tagSource?.let { source -> TagPickerDialog(source, vm, onClose = { tagSource = null }) }
 }
 
@@ -381,9 +447,11 @@ private fun CrIcon(id: Int, description: String?, modifier: Modifier = Modifier.
 }
 
 @Composable
-private fun SquareAction(icon: Int, label: String, modifier: Modifier, enabled: Boolean, action: () -> Unit) {
+private fun SquareAction(icon: Int, label: String, modifier: Modifier, enabled: Boolean,
+                         containerColor: Color = MaterialTheme.colorScheme.secondaryContainer,
+                         contentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer, action: () -> Unit) {
     Surface(onClick = action, enabled = enabled, modifier = modifier, shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer) {
+        color = containerColor, contentColor = contentColor) {
         Column(Modifier.padding(5.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             CrIcon(icon, label, Modifier.size(28.dp))
             Text(label, fontSize = 11.sp, maxLines = 2, lineHeight = 13.sp,
@@ -394,12 +462,10 @@ private fun SquareAction(icon: Int, label: String, modifier: Modifier, enabled: 
 
 @Composable
 private fun ArticleCard(article: Article, saved: Boolean, onOpen: () -> Unit,
-    onRight: () -> Unit, onLeft: () -> Unit, onLongPress: () -> Unit) {
+                        onRight: () -> Unit, onLeft: () -> Unit, onLongPress: () -> Unit,
+                        onHint: (String, SwipeAction?) -> Unit,
+                        rightAction: SwipeAction? = SwipeAction.Bookmark, leftAction: SwipeAction = SwipeAction.Tag) {
     var expanded by rememberSaveable(article.sourceUrl, article.id) { mutableStateOf(false) }
-    var drag by remember { mutableFloatStateOf(0f) }
-    val right by rememberUpdatedState(onRight)
-    val left by rememberUpdatedState(onLeft)
-    val threshold = with(LocalDensity.current) { 72.dp.toPx() }
     val foreground = if (article.read) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f) else MaterialTheme.colorScheme.onSurface
     val compact = remember(article.text) { excerpt(article.text, ReaderConfig.COLLAPSED_TEXT_LIMIT, true) }
     val full = remember(article.text) { excerpt(article.text, ReaderConfig.EXPANDED_TEXT_LIMIT) }
@@ -407,15 +473,9 @@ private fun ArticleCard(article: Article, saved: Boolean, onOpen: () -> Unit,
     LaunchedEffect(article.thumbnail) {
         image = if (article.thumbnail.isEmpty()) null else withContext(Dispatchers.IO) { ThumbnailCache.load(article.thumbnail) }
     }
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth().offset { IntOffset(drag.roundToInt(), 0) }
-            .pointerInput(article.id, article.sourceUrl, threshold) {
-                detectHorizontalDragGestures(
-                    onDragEnd = { if (drag > threshold) right() else if (drag < -threshold) left(); drag = 0f },
-                    onDragCancel = { drag = 0f },
-                ) { change, amount -> change.consume(); drag = (drag + amount).coerceIn(-threshold * 1.6f, threshold * 1.6f) }
-            }.combinedClickable(onClick = onOpen, onLongClick = onLongPress)) {
+    SwipeCard(key = "article:${article.sourceUrl}:${article.id}",
+        rightAction = rightAction, leftAction = leftAction, onHint = onHint,
+        onRight = onRight, onLeft = onLeft, onClick = onOpen, onLongPress = onLongPress) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(article.sourceName, color = if (article.read) foreground else MaterialTheme.colorScheme.primary,
@@ -449,16 +509,20 @@ private fun ArticleCard(article: Article, saved: Boolean, onOpen: () -> Unit,
 }
 
 @Composable
-private fun ReaderDialog(title: String, onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+private fun ReaderDialog(title: String, onClose: () -> Unit, swipeHint: SwipeHint? = null,
+                         content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(0.96f).fillMaxHeight(0.92f), shape = RoundedCornerShape(20.dp)) {
-            Column(Modifier.padding(18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                    IconButton(onClick = onClose) { CrIcon(R.drawable.ic_cr_close, stringResource(R.string.cr_close)) }
+            Box {
+                Column(Modifier.padding(18.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                        IconButton(onClick = onClose) { CrIcon(R.drawable.ic_cr_close, stringResource(R.string.cr_close)) }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    content()
                 }
-                Spacer(Modifier.height(12.dp))
-                content()
+                SwipeLabel(swipeHint, Modifier.align(Alignment.TopCenter).padding(top = 6.dp))
             }
         }
     }
@@ -476,11 +540,9 @@ private fun TagChoices(names: List<String>, selected: Set<Int>, onChange: (Set<I
 }
 
 @Composable
-private fun ColumnScope.AddSourcePanel(vm: ReaderViewModel, onAdded: () -> Unit, onEdit: (FeedSource) -> Unit) {
+private fun ColumnScope.AddSourcePanel(vm: ReaderViewModel, onAdded: () -> Unit) {
     var address by rememberSaveable { mutableStateOf("") }
     var selectedTags by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var limit by remember(vm.state.defaultLimit) { mutableFloatStateOf(vm.state.defaultLimit.toFloat()) }
-    var applyExisting by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         OutlinedTextField(address, { address = it; vm.candidates = emptyList() },
             label = { Text(stringResource(R.string.cr_website_url)) }, singleLine = true,
@@ -501,22 +563,54 @@ private fun ColumnScope.AddSourcePanel(vm: ReaderViewModel, onAdded: () -> Unit,
                 }
             }
         }
-        HorizontalDivider(Modifier.padding(vertical = 18.dp))
-        Text(stringResource(R.string.cr_default_limit, limit.roundToInt()), style = MaterialTheme.typography.titleSmall)
-        Slider(limit, { limit = it }, valueRange = 1f..20f, steps = 18,
-            onValueChangeFinished = { vm.setDefaultLimit(limit.roundToInt(), applyExisting) })
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(applyExisting, { applyExisting = it })
-            Text(stringResource(R.string.cr_apply_existing), style = MaterialTheme.typography.bodySmall)
-        }
-        Text(stringResource(R.string.cr_your_sources), Modifier.padding(top = 18.dp), style = MaterialTheme.typography.titleMedium)
-        vm.sortedSources().forEach { source ->
-            TextButton(onClick = { onEdit(source) }, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth()) {
-                    Text(source.name, style = MaterialTheme.typography.titleSmall)
-                    Text(source.url, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun ColumnScope.AllSourcesPanel(vm: ReaderViewModel, onHint: (String, SwipeAction?) -> Unit,
+                                        onOpen: (FeedSource) -> Unit, onEdit: (FeedSource) -> Unit, onDelete: (FeedSource) -> Unit) {
+    Text(stringResource(R.string.cr_tap_source_hint), Modifier.padding(bottom = 6.dp),
+        style = MaterialTheme.typography.bodySmall)
+    Text(stringResource(R.string.cr_sources_hint), Modifier.padding(bottom = 16.dp),
+        style = MaterialTheme.typography.bodySmall)
+    val sources = vm.sortedSources()
+    if (sources.isEmpty()) Text(stringResource(R.string.cr_no_sources), Modifier.padding(vertical = 24.dp))
+    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items(sources, key = { it.url }) { source ->
+            SwipeCard(key = "source:${source.url}", rightAction = SwipeAction.Settings,
+                leftAction = SwipeAction.DeleteSource, onHint = onHint,
+                onRight = { onEdit(source) }, onLeft = { onDelete(source) }, onClick = { onOpen(source) }) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(source.name, style = MaterialTheme.typography.titleMedium)
+                    Text(source.url, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                    Text(stringResource(R.string.cr_source_limit, source.limit),
+                        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 10.dp))
+                    if (source.tags.isNotEmpty()) Text(source.tags.sorted().joinToString(" · ") { vm.state.tagNames[it] },
+                        style = MaterialTheme.typography.bodySmall)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.HelpPanel() {
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Text(stringResource(R.string.cr_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.cr_about), Modifier.padding(top = 12.dp))
+        listOf(R.string.cr_help_reading to R.string.cr_help_reading_body,
+            R.string.cr_help_gestures to R.string.cr_gesture_hint,
+            R.string.cr_all_sources to R.string.cr_help_sources_body,
+            R.string.cr_all_downloaded to R.string.cr_help_single_source,
+            R.string.cr_tags to R.string.cr_help_tags_body,
+            R.string.cr_bookmarks to R.string.cr_help_bookmarks_body,
+            R.string.cr_help_transfer to R.string.cr_help_transfer_body,
+            R.string.cr_help_feed_limits to R.string.cr_help_feed_limits_body).forEach { (title, body) ->
+            Text(stringResource(title), Modifier.padding(top = 20.dp, bottom = 6.dp),
+                style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(body), style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -568,27 +662,42 @@ private fun TagPickerDialog(source: FeedSource, vm: ReaderViewModel, onClose: ()
 
 @Composable
 private fun SourceEditor(source: FeedSource, vm: ReaderViewModel, onClose: () -> Unit) {
-    var name by remember { mutableStateOf(source.name) }
-    var tags by remember { mutableStateOf(source.tags) }
-    var limit by remember { mutableFloatStateOf(source.limit.toFloat()) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onClose, title = { Text(stringResource(R.string.cr_edit_source)) },
+    var name by remember(source.url) { mutableStateOf(source.name) }
+    var tags by remember(source.url) { mutableStateOf(source.tags) }
+    var limit by remember(source.url) { mutableFloatStateOf(source.limit.toFloat()) }
+    var showTags by rememberSaveable(source.url) { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = onClose, title = { Text(stringResource(R.string.cr_limits_tags)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(name, { name = it.take(150) }, label = { Text(stringResource(R.string.cr_name)) }, singleLine = true)
-                TagChoices(vm.state.tagNames, tags) { tags = it }
-                Text(stringResource(R.string.cr_source_limit, limit.roundToInt()))
-                Slider(limit, { limit = it }, valueRange = 1f..20f, steps = 18)
-                TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.cr_remove_source), color = MaterialTheme.colorScheme.error) }
+                OutlinedTextField(name, { name = it.take(150) },
+                    label = { Text(stringResource(R.string.cr_name)) }, singleLine = true)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !showTags, onClick = { showTags = false },
+                        label = { Text(stringResource(R.string.cr_limits)) })
+                    FilterChip(selected = showTags, onClick = { showTags = true },
+                        label = { Text(stringResource(R.string.cr_tags)) })
+                }
+                if (showTags) {
+                    Text(stringResource(R.string.cr_tags_apply_source))
+                    vm.state.tagNames.forEachIndexed { index, name ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(index in tags, { tags = if (it) tags + index else tags - index })
+                            Text(name)
+                        }
+                    }
+                } else {
+                    Text(stringResource(R.string.cr_source_limit, limit.roundToInt()))
+                    Slider(limit, { limit = it }, valueRange = 1f..20f, steps = 18)
+                    Text(stringResource(R.string.cr_source_limit_hint), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }, confirmButton = { TextButton(onClick = {
-            vm.updateSource(source.copy(name = name.trim(), tags = tags, limit = limit.roundToInt())); onClose()
+            vm.state.sources.firstOrNull { it.url == source.url }?.let {
+                vm.updateSource(it.copy(name = name.trim(), tags = tags, limit = limit.roundToInt()))
+            }
+            onClose()
         }, enabled = name.isNotBlank()) { Text(stringResource(R.string.cr_save)) } },
         dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.cr_cancel)) } })
-    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text(stringResource(R.string.cr_remove_source)) },
-        text = { Text(stringResource(R.string.cr_remove_source_hint, source.name)) },
-        confirmButton = { TextButton(onClick = { vm.removeSource(source); onClose() }) { Text(stringResource(R.string.cr_remove)) } },
-        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cr_cancel)) } })
 }
 
 @Composable

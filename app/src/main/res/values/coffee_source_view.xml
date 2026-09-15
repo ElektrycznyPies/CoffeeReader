@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cr_back_to_flow">Back to flow</string>
+    <string name="cr_single_source_hint">Viewing one source. Tap Back to flow to show all sources.</string>
+    <string name="cr_all_downloaded">All downloaded articles</string>
+    <string name="cr_source_no_articles">No downloaded articles yet.</string>
+    <string name="cr_source_empty_hint">Tap Refresh to fetch articles from this source.</string>
+    <string name="cr_tap_source_hint">Tap a source to read all its downloaded articles.</string>
+    <string name="cr_help_single_source">Tap a source in All sources to open its complete downloaded feed. The background turns light green. This view ignores Time depth, tag filters and the visible-item limit. Tap Back to flow or use Android Back to restore your previous view and filters. Feed download limits still apply.</string>
+</resources>

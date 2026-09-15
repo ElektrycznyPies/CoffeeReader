@@ -10,6 +10,8 @@ object ReaderConfig {
     const val DEFAULT_SOURCE_LIMIT = 3
     const val SCHEMA_VERSION = 1
     const val MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024
+    const val MAX_FEED_BYTES = 6 * 1024 * 1024
+    const val MAX_FEED_ENTRIES = 100
     const val MAX_SOURCES = 500
     val DAY_OPTIONS = listOf(0, 1, 3, 5, 7, 14, 30)
 
@@ -51,7 +53,9 @@ data class ReaderState(
 )
 
 data class FeedCandidate(val url: String, val name: String)
-data class ParsedFeed(val source: FeedSource, val articles: List<Article>)
+enum class FeedLimit { NONE, ENTRIES, BYTES }
+data class ParsedFeed(val source: FeedSource, val articles: List<Article>,
+    val limit: FeedLimit = FeedLimit.NONE, val bytesRead: Long = 0, val entriesRead: Int = articles.size)
 data class ImportData(val sources: List<FeedSource>, val bookmarks: List<Article>, val tagNames: List<String>)
 data class FeedSet(val name: String, val description: String, val url: String)
 
@@ -103,3 +107,10 @@ fun limitedArticles(articles: List<Article>, sources: List<FeedSource>, expanded
         article.sourceUrl in expanded || count <= (limits[article.sourceUrl] ?: ReaderConfig.DEFAULT_SOURCE_LIMIT)
     }
 }
+
+// Match by feed URL, not publisher name: separate topic feeds remain independent.
+fun ReaderState.withoutSource(url: String): ReaderState = copy(
+    sources = sources.filterNot { it.url == url },
+    articles = articles.filterNot { it.sourceUrl == url },
+    bookmarks = bookmarks.filterNot { it.sourceUrl == url },
+)
