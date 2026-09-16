@@ -303,9 +303,12 @@ private fun ReaderContent(vm: ReaderViewModel) {
                 Column(Modifier.systemBarsPadding().padding(16.dp)) {
                     Text(stringResource(R.string.cr_app_name), style = MaterialTheme.typography.headlineSmall,
                         modifier = Modifier.padding(vertical = 20.dp))
-                    listOf(R.string.cr_discover_sets to Panel.Sets, R.string.cr_bookmarks to Panel.Bookmarks,
-                        R.string.cr_export_feeds to Panel.Export, R.string.cr_import_feeds to Panel.Import,
-                        R.string.cr_tags to Panel.Tags, R.string.cr_all_sources to Panel.Sources,
+                    listOf(R.string.cr_all_sources to Panel.Sources,
+                        R.string.cr_bookmarks to Panel.Bookmarks,
+                        R.string.cr_export_feeds to Panel.Export,
+                        R.string.cr_import_feeds to Panel.Import,
+                        R.string.cr_tags to Panel.Tags,
+                        R.string.cr_discover_sets to Panel.Sets,
                         R.string.cr_help_about to Panel.Help).forEach { (label, target) ->
                         TextButton(onClick = {
                             drawer = false; panel = target

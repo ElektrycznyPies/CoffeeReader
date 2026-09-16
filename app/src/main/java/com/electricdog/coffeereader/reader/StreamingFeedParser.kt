@@ -16,6 +16,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.xml.parsers.SAXParserFactory
+import java.io.BufferedInputStream
 
 class NotAFeedException : SAXException("The response is not RSS or Atom")
 private class FeedStop(val reason: FeedLimit) : SAXException()
@@ -37,6 +38,40 @@ private class FeedBudgetStream(input: InputStream, private val limit: Int) : Fil
         return `in`.read(buffer, offset, allowed).also { if (it > 0) count += it }
     }
     override fun close() = Unit
+}
+
+private fun normalizeXmlStart(input: InputStream): InputStream {
+    val stream = BufferedInputStream(input)
+    stream.mark(1032)
+
+    var whitespaceCount = 0
+    var first = stream.read()
+
+    // Inspect at most 1024 leading XML whitespace bytes.
+    while (
+        whitespaceCount < 1024 &&
+        (first == 0x20 || first == 0x09 ||
+                first == 0x0A || first == 0x0D)
+    ) {
+        whitespaceCount++
+        first = stream.read()
+    }
+
+    val hasXmlDeclaration =
+        first == '<'.code &&
+                stream.read() == '?'.code &&
+                stream.read() == 'x'.code &&
+                stream.read() == 'm'.code &&
+                stream.read() == 'l'.code
+
+    stream.reset()
+
+    // Preserve the original bytes unless an XML declaration follows.
+    if (hasXmlDeclaration) {
+        repeat(whitespaceCount) { stream.read() }
+    }
+
+    return stream
 }
 
 object StreamingFeedParser {
@@ -61,7 +96,10 @@ object StreamingFeedParser {
         runCatching { reader.setProperty("http://xml.org/sax/properties/lexical-handler", handler) }
         var stopped = FeedLimit.NONE
         try {
-            reader.parse(InputSource(bounded).apply { systemId = url; this.encoding = encoding })
+            reader.parse(InputSource(normalizeXmlStart(bounded)).apply {
+                systemId = url
+                this.encoding = encoding
+            })
         } catch (stop: FeedStop) {
             stopped = stop.reason
         } catch (error: Exception) {

@@ -10,7 +10,7 @@ import java.net.URI
 import java.net.URL
 import java.net.URLEncoder
 import java.nio.charset.Charset
-
+import android.util.Log
 data class HttpText(val text: String, val url: String)
 
 class HttpFailure(val code: Int) : Exception("HTTP $code")
@@ -81,10 +81,20 @@ object FeedNetwork {
     private fun declaredEncoding(contentType: String): String? =
         Regex("charset=[\"']?([^;\\s\"']+)", RegexOption.IGNORE_CASE).find(contentType)?.groupValues?.get(1)
 
-    private fun fetchAddress(address: String): ParsedFeed = responseStream(address) { stream, url, contentType ->
-        StreamingFeedParser.parse(stream, url, declaredEncoding(contentType))
+    private fun fetchAddress(address: String): ParsedFeed {
+        try {
+            return responseStream(address) { stream, url, contentType ->
+                StreamingFeedParser.parse(
+                    stream,
+                    url,
+                    declaredEncoding(contentType),
+                )
+            }
+        } catch (error: Exception) {
+            Log.e("CoffeeFeed", "Failed to load feed: $address", error)
+            throw error
+        }
     }
-
     fun discover(address: String): List<FeedCandidate> {
         val supplied = address.trim().let { if ("://" in it) it else "https://$it" }
         runCatching { fetchAddress(supplied) }.getOrNull()?.let {
