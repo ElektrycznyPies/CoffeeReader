@@ -154,7 +154,7 @@ internal fun SwipeCard(
                         else if (distance <= -threshold && leftAction != null) left()
                     }
                 }
-            }.combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            }.combinedClickable(onClick = onClick)
             .semantics {
                 customActions = listOfNotNull(
                     rightLabel?.let { CustomAccessibilityAction(it) { right(); true } },
