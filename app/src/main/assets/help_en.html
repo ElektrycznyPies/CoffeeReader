@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Coffee Reader - Help</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; max-width: 700px; margin: 2rem auto; padding: 0 1rem; color: #222; background: #fff; overflow-wrap: break-word; }
+  h1, h2, h3 { color: #111; margin-top: 1em; margin-bottom: 0.5em; }
+  ul { padding-left: 1.2rem; }
+  li { margin-bottom: 0.4rem; }
+  img.app-logo { max-width: 100%; height: auto; display: block; margin: 0; }
+</style>
+</head>
+<body>
+
+<p><img src="file:///android_res/drawable/ic_splash_text.png" alt="Coffee Reader" class="app-logo" style="width: 250px; max-width: 100%; height: auto; object-fit: contain;"></p>
+
+<p>Free, simple, and fast RSS news aggregator. No account needed. Tailor your reading to your liking. Backup and share your feeds. Create thematic news sets.</p>
+
+<h2>MAIN SCREEN</h2>
+
+<h3>Add source</h3>
+<p>Type the main website address in, and tap <em>Find feed</em>. (Enter <code>site.com</code>, and the app will automatically extract its feed channel, e.g. <code>site.com/feed</code>). Then add found feed channels to your sources set.</p>
+
+<h3>Viewing modes button: Flow or Group by source</h3>
+<p><strong>Flow mode</strong> displays all the items as they come from all publishers, sorted by time. In <strong>Group by source mode</strong> you will see them grouped alphabetically by publisher.</p>
+
+<h3>Time depth</h3>
+<p>Choose from how many days in the past you'd like to fetch your feeds. Or <em>Since last visit</em>.</p>
+
+<h3>Swiping: Show more or Add bookmark</h3>
+<p>By default you will only see 3 items per publisher (changeable in <em>Menu: All sources</em>).</p>
+
+<ul>
+  <li><strong>Swipe left:</strong> See all items by a publisher within the selected time depth.</li>
+  <li><strong>Swipe right:</strong> Save an item to <em>Bookmarks</em> if you find it important.</li>
+</ul>
+
+<h3>Tags</h3>
+<p>At the bottom of the screen you will find five tags. Tapping any of them will show sources marked by this tag. That way you can create your own thematic digests. See more in <em>Menu: All sources</em> and <em>Menu: Tags</em>.</p>
+
+<h2>MENU</h2>
+
+<h3>All sources</h3>
+<p>Here you can display all the feed sources you added.</p>
+<ul>
+  <li><strong>Swipe left:</strong> Completely delete a source with all its bookmarks and history.</li>
+  <li><strong>Swipe right:</strong> Open Limits / Tags window.
+    <ul>
+      <li><strong>Limits:</strong> Why this is important: some sources (like big media) generate tens or even hundreds items daily, and completely dominate your feed. This option lets you limit their activity to only a few items (from 1 to 20) on main screen. <br>To see more items by a publisher, just tap a source from <em>All sources</em> list. You will see all items by that publisher on main screen. (Then hit <em>Back to flow</em> to return to normal view).
+        You can also swipe left on main screen to see more item by a publisher.
+      </li>
+      <li><strong>Tags:</strong> Add from 0 to 5 tags to a source to create thematic news digests.</li>
+    </ul>
+  </li>
+</ul>
+<p>In this window you can also change the source's name.</p>
+
+<h3>Bookmarks</h3>
+<p>Here you will see all bookmarked items. Swipe left to delete.</p>
+
+<h3>Export feeds</h3>
+<p>A very useful option that lets you export all your feeds (with tags) and bookmarks to:</p>
+<ul>
+  <li>A <strong>JSON file</strong> (e.g. as a backup on your device).</li>
+  <li>The text server <strong>dpaste.com</strong> (e.g. to share your feeds with a remote friend or open them in Coffee Reader installed on another device). Tap the <em>Export</em> button to generate a link valid for 24 hours. A QR code and sharing options will also be provided.</li>
+</ul>
+
+<h3>Import feeds</h3>
+<p>Type or paste the <code>dpaste.com</code> export link here, scan the QR code, or choose a JSON file with feeds. Only new sources will be imported; existing ones will be omitted.</p>
+
+<h3>Tags</h3>
+<p>Here you can rename tags and toggle their view on/off on the main screen.</p>
+<p><em>Warning: If you rename your tags, they will be ignored after exporting them to a device with another tags structure.</em></p>
+
+<h3>Discover feed sets</h3>
+<p>A lazy option to import pre-prepared source sets. Will arrive soon-ish.</p>
+<hr>
+<h3>About</h3>
+<p>Coffee Reader was mainly vibe coded by GPT-6, directed and corrected by (c) Dariusz Zen Żukowski as a product owner, 2026. It is free for private use until it changes. All the graphic materials & icons done personally by the author. </p>
+
+</body>
+</html>

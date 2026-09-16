@@ -638,22 +638,7 @@ private fun ColumnScope.AllSourcesPanel(vm: ReaderViewModel, onHint: (String, Sw
 
 @Composable
 private fun ColumnScope.HelpPanel() {
-    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-        Text(stringResource(R.string.cr_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.labelLarge)
-        Text(stringResource(R.string.cr_about), Modifier.padding(top = 12.dp))
-        listOf(R.string.cr_help_reading to R.string.cr_help_reading_body,
-            R.string.cr_help_gestures to R.string.cr_swipe_reading_help,
-            R.string.cr_all_sources to R.string.cr_help_sources_body,
-            R.string.cr_all_downloaded to R.string.cr_help_single_source,
-            R.string.cr_tags to R.string.cr_help_tags_body,
-            R.string.cr_bookmarks to R.string.cr_help_bookmarks_body,
-            R.string.cr_help_transfer to R.string.cr_help_transfer_body,
-            R.string.cr_help_feed_limits to R.string.cr_help_feed_limits_body).forEach { (title, body) ->
-            Text(stringResource(title), Modifier.padding(top = 20.dp, bottom = 6.dp),
-                style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(body), style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+    CoffeeHelpPanel(Modifier.weight(1f))
 }
 
 @Composable
