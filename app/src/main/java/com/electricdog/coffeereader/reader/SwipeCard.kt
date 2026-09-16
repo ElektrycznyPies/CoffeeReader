@@ -32,15 +32,18 @@ import androidx.compose.ui.input.pointer.positionChange
 import kotlin.math.sign
 internal enum class SwipeAction(val label: Int, val color: Color, val strength: Float) {
     Bookmark(R.string.cr_adding_bookmark, Color(0xFF45B86B), 0.48f),
-    Tag(R.string.cr_adding_tags, Color(0xFFFFA342), 0.24f),
     Settings(R.string.cr_limits_tags, Color(0xFFFFA342), 0.24f),
     DeleteSource(R.string.cr_delete_source, Color(0xFFEF5350), 0.48f),
     DeleteBookmark(R.string.cr_remove_bookmark, Color(0xFFEF5350), 0.48f),
+    More(R.string.cr_swipe_show_more, Color(0xFFFFA342), 0.24f),
 }
 
 // The owner keeps a single hint above the screen, never underneath a moving card.
-internal data class SwipeHint(val owner: String, val action: SwipeAction)
-
+internal data class SwipeHint(
+    val owner: String,
+    val action: SwipeAction,
+    val count: Int? = null,
+)
 @Composable
 internal fun SwipeCard(
     key: String,
@@ -163,9 +166,15 @@ internal fun SwipeCard(
 @Composable
 internal fun SwipeLabel(hint: SwipeHint?, modifier: Modifier = Modifier) {
     if (hint != null) Box(modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+        val count = hint.count
+        val label = if (hint.action == SwipeAction.More && count != null && count > 0) {
+            stringResource(R.string.cr_swipe_more_count, count)
+        } else {
+            stringResource(hint.action.label)
+        }
         Surface(color = hint.action.color, contentColor = Color(0xFF201A13),
             shape = RoundedCornerShape(10.dp), shadowElevation = 4.dp) {
-            Text(stringResource(hint.action.label), Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+            Text(label, Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
                 style = MaterialTheme.typography.labelLarge)
         }
     }
