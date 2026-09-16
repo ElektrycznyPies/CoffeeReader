@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:ignore="MissingTranslation">
+    <string name="cr_swipe_show_more">Show more</string>
+    <string name="cr_swipe_more_count">Show %1$d more</string>
+    <string name="cr_swipe_add_bookmark">Add bookmark</string>
+    <string name="cr_swipe_remove_bookmark">Remove bookmark</string>
+    <string name="cr_swipe_reading_help">Swipe right or long-press to bookmark. Swipe left to show the remaining articles from that source in the current view. Change source tags in All sources by swiping right for Limits / Tags.</string>
+</resources>

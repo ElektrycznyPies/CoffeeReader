@@ -153,7 +153,16 @@ private fun ReaderContent(vm: ReaderViewModel) {
                             ) {
                                 if (focusedSource != null) focusedSourceUrl = null else vm.setGrouped(!state.grouped)
                             }
-                            Spacer(Modifier.weight(1f))
+                            SwipeLegend(
+                                modifier = Modifier.weight(1f),
+                                leftLabel = if (focusedSource == null) {
+                                    stringResource(R.string.cr_swipe_show_more)
+                                } else null,
+                                leftColor = SwipeAction.More.color,
+                                rightLabel = stringResource(R.string.cr_swipe_add_bookmark),
+                                rightColor = SwipeAction.Bookmark.color,
+                                compact = true,
+                            )
                             IconButton(onClick = { drawer = true }, enabled = vm.ready, modifier = Modifier.size(52.dp)) {
                                 CrIcon(R.drawable.ic_cr_menu, stringResource(R.string.cr_menu))
                             }
@@ -228,6 +237,9 @@ private fun ReaderContent(vm: ReaderViewModel) {
                         state.articles.filter { it.sourceUrl == focusedSource.url }
                             .sortedByDescending { it.publishedAt }.map { FeedRow.Item(it) }
                     } else buildRows(filteredArticles(state, vm.activeTag, vm.visitStart, System.currentTimeMillis()), vm)
+                    val hiddenCounts = rows.filterIsInstance<FeedRow.More>()
+                        .filterNot { it.expanded }
+                        .associate { it.source.url to it.count }
                     if (rows.isEmpty()) {
                         Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center,
                             horizontalAlignment = Alignment.CenterHorizontally) {
@@ -255,11 +267,27 @@ private fun ReaderContent(vm: ReaderViewModel) {
                                     Text(if (row.expanded) stringResource(R.string.cr_show_fewer, row.source.name)
                                     else stringResource(R.string.cr_show_more, row.count, row.source.name))
                                 }
-                                is FeedRow.Item -> ArticleCard(row.article,
-                                    saved = state.bookmarks.any { it.id == row.article.id },
-                                    onOpen = { openArticle(row.article) }, onRight = { vm.bookmark(row.article) },
-                                    onLeft = { tagSource = state.sources.firstOrNull { it.url == row.article.sourceUrl } },
-                                    onLongPress = { vm.bookmark(row.article) }, onHint = onSwipeHint)
+                                is FeedRow.Item -> {
+                                    val moreCount = hiddenCounts[row.article.sourceUrl] ?: 0
+                                    ArticleCard(
+                                        row.article,
+                                        saved = state.bookmarks.any { it.id == row.article.id },
+                                        onOpen = { openArticle(row.article) },
+                                        onRight = { vm.bookmark(row.article) },
+                                        onLeft = {
+                                            vm.expandedSources = vm.expandedSources + row.article.sourceUrl
+                                        },
+                                        onLongPress = { vm.bookmark(row.article) },
+                                        leftAction = if (moreCount > 0) SwipeAction.More else null,
+                                        onHint = { owner, action ->
+                                            if (action == SwipeAction.More) {
+                                                swipeHint = SwipeHint(owner, action, moreCount)
+                                            } else {
+                                                onSwipeHint(owner, action)
+                                            }
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -288,7 +316,7 @@ private fun ReaderContent(vm: ReaderViewModel) {
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    Text(stringResource(R.string.cr_gesture_hint), style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.cr_swipe_reading_help), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -319,6 +347,11 @@ private fun ReaderContent(vm: ReaderViewModel) {
                 val bookmarkRemovedMessage = stringResource(R.string.cr_bookmark_removed)
                 val undoLabel = stringResource(R.string.cr_undo)
                 var byTime by rememberSaveable { mutableStateOf(true) }
+                SwipeLegend(
+                    leftLabel = stringResource(R.string.cr_swipe_remove_bookmark),
+                    leftColor = SwipeAction.DeleteBookmark.color,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
                 TextButton(onClick = { byTime = !byTime }) {
                     Text(stringResource(if (byTime) R.string.cr_by_time else R.string.cr_by_name))
                 }
@@ -442,8 +475,8 @@ private fun buildRows(all: List<Article>, vm: ReaderViewModel): List<FeedRow> {
 }
 
 @Composable
-private fun CrIcon(id: Int, description: String?, modifier: Modifier = Modifier.size(26.dp)) {
-    Icon(painterResource(id), contentDescription = description, modifier = modifier)
+private fun CrIcon(id: Int, description: String?, modifier: Modifier = Modifier) {
+    Icon(painterResource(id), contentDescription = description, modifier = modifier.size(26.dp))
 }
 
 @Composable
@@ -464,7 +497,7 @@ private fun SquareAction(icon: Int, label: String, modifier: Modifier, enabled: 
 private fun ArticleCard(article: Article, saved: Boolean, onOpen: () -> Unit,
                         onRight: () -> Unit, onLeft: () -> Unit, onLongPress: () -> Unit,
                         onHint: (String, SwipeAction?) -> Unit,
-                        rightAction: SwipeAction? = SwipeAction.Bookmark, leftAction: SwipeAction = SwipeAction.Tag) {
+                        rightAction: SwipeAction? = SwipeAction.Bookmark, leftAction: SwipeAction? = null) {
     var expanded by rememberSaveable(article.sourceUrl, article.id) { mutableStateOf(false) }
     val foreground = if (article.read) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.48f) else MaterialTheme.colorScheme.onSurface
     val compact = remember(article.text) { excerpt(article.text, ReaderConfig.COLLAPSED_TEXT_LIMIT, true) }
@@ -571,8 +604,13 @@ private fun ColumnScope.AllSourcesPanel(vm: ReaderViewModel, onHint: (String, Sw
                                         onOpen: (FeedSource) -> Unit, onEdit: (FeedSource) -> Unit, onDelete: (FeedSource) -> Unit) {
     Text(stringResource(R.string.cr_tap_source_hint), Modifier.padding(bottom = 6.dp),
         style = MaterialTheme.typography.bodySmall)
-    Text(stringResource(R.string.cr_sources_hint), Modifier.padding(bottom = 16.dp),
-        style = MaterialTheme.typography.bodySmall)
+    SwipeLegend(
+        leftLabel = stringResource(R.string.cr_delete_source),
+        leftColor = SwipeAction.DeleteSource.color,
+        rightLabel = stringResource(R.string.cr_limits_tags),
+        rightColor = SwipeAction.Settings.color,
+        modifier = Modifier.padding(bottom = 16.dp),
+    )
     val sources = vm.sortedSources()
     if (sources.isEmpty()) Text(stringResource(R.string.cr_no_sources), Modifier.padding(vertical = 24.dp))
     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -601,7 +639,7 @@ private fun ColumnScope.HelpPanel() {
         Text(stringResource(R.string.cr_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.labelLarge)
         Text(stringResource(R.string.cr_about), Modifier.padding(top = 12.dp))
         listOf(R.string.cr_help_reading to R.string.cr_help_reading_body,
-            R.string.cr_help_gestures to R.string.cr_gesture_hint,
+            R.string.cr_help_gestures to R.string.cr_swipe_reading_help,
             R.string.cr_all_sources to R.string.cr_help_sources_body,
             R.string.cr_all_downloaded to R.string.cr_help_single_source,
             R.string.cr_tags to R.string.cr_help_tags_body,
