@@ -45,9 +45,9 @@ private fun SwipeLegendItem(label: String, arrowColor: Color, pointsRight: Boole
                             compact: Boolean, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        if (!pointsRight) Text("←", color = arrowColor, fontSize = 18.sp)
+        if (!pointsRight) Text("◀", color = arrowColor, fontSize = 18.sp)
         Text(label, Modifier.weight(1f, fill = false), fontSize = if (compact) 10.sp else 12.sp,
             lineHeight = if (compact) 12.sp else 15.sp)
-        if (pointsRight) Text("→", color = arrowColor, fontSize = 18.sp)
+        if (pointsRight) Text("▶", color = arrowColor, fontSize = 18.sp)
     }
 }
