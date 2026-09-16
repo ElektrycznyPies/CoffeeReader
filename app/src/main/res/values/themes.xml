@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.CoffeeReader" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.CoffeeReader"
+        parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/beige</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenBrandingImage">@drawable/ic_splash_text</item>
+        <item name="postSplashScreenTheme">@style/Theme.CoffeeReader</item>
+    </style>
+
 </resources>

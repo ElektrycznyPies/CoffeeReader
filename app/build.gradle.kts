@@ -50,6 +50,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.core:core-splashscreen:1.2.0")
+
     testImplementation(libs.junit)
     // Real JSON implementation for local JVM tests instead of Android stubs.
     testImplementation("org.json:json:20240303")

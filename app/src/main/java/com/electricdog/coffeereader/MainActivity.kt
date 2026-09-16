@@ -8,11 +8,13 @@ import androidx.lifecycle.ViewModelProvider
 import com.electricdog.coffeereader.reader.CoffeeReaderApp
 import com.electricdog.coffeereader.reader.ReaderViewModel
 import com.electricdog.coffeereader.ui.theme.CoffeeReaderTheme
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 
 class MainActivity : ComponentActivity() {
     private lateinit var reader: ReaderViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         reader = ViewModelProvider(this)[ReaderViewModel::class.java]
