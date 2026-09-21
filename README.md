@@ -2,12 +2,12 @@
 
 Free, fast and simple RSS/Atom news aggregator. 
 
-- No account needed. 
+- No account needed.
 - Find RSS/Atom channels on websites automatically and quickly.
-- Filter the feeds timeline and density to your liking.
+- Easily set-up the feed flow, time depth and feed density to your liking: limit highly productive publishers that flood your flow.
 - Backup and share your feeds sets, transfer them to other Android devices.
 - Bookmark important items.
-- Create thematic news digests.
+- Create thematic news digests by tagging.
 
 In case you need help, refer to _Menu: Help & About_ inside the app.
 
@@ -25,8 +25,9 @@ I will greatly appreciate your remarks and suggestions after testing. Find me he
 ### What to expect in later versions
 
 - A proper 1.0 version after receiving sufficiently many tests and feedbacks, with some minor bug fixes and improvements.
-- "Discover feeds sets": a lazy option to import pre-prepared source sets. I am planning to post on GitHub about 10 to 20 JSON files with ready thematic sets covering arts, events, economy, sports, etc. -- English and Polish sources.
+- "Discover feeds sets": a lazy option to import pre-prepared source sets. I am planning to post on GitHub about 10 to 20 JSON files with ready thematic sets covering arts, events, economy, sports, etc. - English and Polish sources.
 - Fetching feeds from the news-cycle style, regularly updated websites that do not support RSS/Atom feed. It will be a hit-and-miss function due to various possible solutions developers use to roll their news, but it should work with at least some websites.
+- OPML integration.
 
 ### About and Licensing
 
