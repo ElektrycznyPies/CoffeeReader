@@ -4,7 +4,8 @@ Free, fast and simple RSS/Atom news aggregator.
 
 - No account needed.
 - Find RSS/Atom channels on websites automatically and quickly.
-- Easily set-up the feed flow, time depth and feed density to your liking: limit highly productive publishers that flood your flow.
+- Easily set the feed flow and time depth up to your liking.
+- Limit highly productive publishers from flooding your flow to create a balanced digest.
 - Backup and share your feeds sets, transfer them to other Android devices.
 - Bookmark important items.
 - Create thematic news digests by tagging.
